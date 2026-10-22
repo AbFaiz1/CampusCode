@@ -67,7 +67,11 @@ const DEPARTMENTS = [
 ];
 
 const COURSES: Record<string, string[]> = {
-  "Computer Science & Engineering": ["B.Tech Computer Science", "B.Tech Computer Science (AI & ML)"],
+  "Computer Science & Engineering": [
+    "B.Tech Computer Science",
+    "B.Tech Computer Science (AI & ML)",
+    "MCA Computer Science",
+  ],
   "Information Technology": ["B.Tech Information Technology"],
   "Electronics & Communication": ["B.Tech Electronics & Communication"],
   "Mechanical Engineering": ["B.Tech Mechanical Engineering"],
@@ -489,12 +493,13 @@ async function main() {
     departmentIds.set(dept.name, created.id);
 
     for (const courseName of COURSES[dept.name] ?? []) {
+      const isMca = courseName.toUpperCase().includes("MCA");
       const course = await prisma.course.create({
         data: {
           name: courseName,
-          shortName: courseName.replace("B.Tech ", "BTech "),
-          degree: "B.Tech",
-          durationYears: 4,
+          shortName: isMca ? "MCA CSE" : courseName.replace("B.Tech ", "BTech "),
+          degree: isMca ? "MCA" : "B.Tech",
+          durationYears: isMca ? 3 : 4,
           departmentId: created.id,
           collegeId: college.id,
         },
@@ -502,18 +507,6 @@ async function main() {
       courseIds.set(courseName, course.id);
     }
   }
-
-  // A college-wide course for the general pool.
-  const mca = await prisma.course.create({
-    data: {
-      name: "MCA",
-      shortName: "MCA",
-      degree: "MCA",
-      durationYears: 2,
-      collegeId: college.id,
-    },
-  });
-  courseIds.set("MCA", mca.id);
 
   const createdUsers: { id: string; name: string }[] = [];
 
