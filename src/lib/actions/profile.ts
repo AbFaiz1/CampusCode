@@ -6,14 +6,15 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getSessionUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { recomputeUserScore } from "@/lib/services/scores";
-import { isPlatform } from "@/lib/constants";
 import {
   AccountError,
   generateVerificationCode,
-  linkAccount,
   syncAccount,
   unlinkAccount,
+  requestVerificationToken,
+  verifyAccount,
 } from "@/lib/services/accounts";
+import { isPlatform, PLATFORM_LABELS, type Platform } from "@/lib/constants";
 
 export type ActionState = { ok: boolean; message: string; data?: unknown } | null;
 

@@ -533,6 +533,7 @@ async function main() {
         showPlatforms: true,
         showEmail: false,
         lastActiveAt: new Date(),
+        siteActivityPoints: 0,
       },
     });
     createdUsers.push({ id: user.id, name: student.name });
@@ -746,6 +747,8 @@ async function main() {
       ratingSeries: history
         .filter((h) => h.ratingAfter !== null)
         .map((h) => ({ platform: h.platform as never, rating: h.ratingAfter as number, at: h.participatedAt })),
+      siteActivityPoints: 0,
+      activeStreak: 0,
     });
 
     await prisma.user.update({
