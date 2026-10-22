@@ -14,6 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
+    "db:push:turso": "tsx scripts/push-turso.ts",
     "seed": "NODE_OPTIONS=--conditions=react-server tsx prisma/seed.ts",
     "sync:contests": "NODE_OPTIONS=--conditions=react-server tsx scripts/sync-contests.ts",
     "setup": "prisma generate && prisma migrate deploy && npm run seed && npm run sync:contests",
