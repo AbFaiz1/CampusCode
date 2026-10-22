@@ -60,12 +60,17 @@ export const CLASS_THRESHOLDS: { cls: CampusClass; min: number; label: string }[
 
 /** Weight of each score component (must sum to 1000). */
 export const SCORE_WEIGHTS = {
-  skill: 800,
-  consistency: 150,
+  skill: 750,
+  consistency: 100,
   improvement: 50,
+  growth: 100,
 } as const;
 
-export const METHODOLOGY_VERSION = "1.2.0";
+export const GROWTH_WEIGHT = 100;
+export const ACTIVITY_POINTS_CAP = 1000;
+export const STREAK_WEIGHT = 20;
+
+export const METHODOLOGY_VERSION = "1.3.0";
 
 /**
  * Absolute rating curves per platform.

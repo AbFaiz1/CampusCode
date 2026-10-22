@@ -5,6 +5,8 @@ import {
   MIN_COHORT_FOR_PERCENTILE,
   PLATFORM_CURVES,
   SCORE_WEIGHTS,
+  ACTIVITY_POINTS_CAP,
+  STREAK_WEIGHT,
   type ActivityLevel,
   type CampusClass,
   type Platform,
@@ -32,6 +34,7 @@ export type ScoreBreakdown = {
   skill: number;
   consistency: number;
   improvement: number;
+  growth: number;
   total: number;
   cls: CampusClass;
   activity: ActivityLevel;
@@ -55,6 +58,9 @@ export type ScoreInput = {
   contestDates: Date[];
   /** Rating series (chronological) for the student, for trend detection. */
   ratingSeries: { platform: Platform; rating: number; at: Date }[];
+  /** Internal site activity data for Growth Score. */
+  siteActivityPoints: number;
+  activeStreak: number;
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -291,6 +297,18 @@ export function computeScore(input: ScoreInput, now = new Date()): ScoreBreakdow
   const consistency = consistencyScore(input.contestDates, now);
   const improvement = improvementScore(input.ratingSeries, now);
 
+  // Growth Score: Combination of site activity and streaks
+  const activityContribution = Math.min(input.siteActivityPoints, ACTIVITY_POINTS_CAP) / ACTIVITY_POINTS_CAP * SCORE_WEIGHTS.growth;
+  const streakContribution = Math.sqrt(input.activeStreak) * STREAK_WEIGHT;
+  const growth = Math.min(activityContribution + streakContribution, SCORE_WEIGHTS.growth);
+
+  if (input.siteActivityPoints > 0) {
+    reasons.push(`Site activity bonus: +${Math.round(activityContribution)} points.`);
+  }
+  if (input.activeStreak > 0) {
+    reasons.push(`Streak bonus: ${input.activeStreak} days $\rightarrow$ +${Math.round(streakContribution)} points.`);
+  }
+
   if (consistency.recent > 0) {
     reasons.push(`${consistency.recent} contest${consistency.recent === 1 ? "" : "s"} in the last 90 days.`);
   } else {
@@ -301,7 +319,7 @@ export function computeScore(input: ScoreInput, now = new Date()): ScoreBreakdow
     reasons.push(`Rating change over 90 days: ${sign}${improvement.delta}.`);
   }
 
-  const total = Math.round((skill + consistency.score + improvement.score) * 10) / 10;
+  const total = Math.round((skill + consistency.score + improvement.score + growth) * 10) / 10;
   const cls = classForTotal(total);
 
   return {
@@ -309,6 +327,7 @@ export function computeScore(input: ScoreInput, now = new Date()): ScoreBreakdow
     skill: Math.round(skill * 10) / 10,
     consistency: Math.round(consistency.score * 10) / 10,
     improvement: Math.round(improvement.score * 10) / 10,
+    growth: Math.round(growth * 10) / 10,
     total,
     cls,
     activity: activityLevel(consistency.daysSinceLast, input.contestDates.length > 0),

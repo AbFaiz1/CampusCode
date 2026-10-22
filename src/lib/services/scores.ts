@@ -74,6 +74,8 @@ export async function recomputeUserScore(userId: string): Promise<ScoreBreakdown
     cohortRatings,
     contestDates,
     ratingSeries,
+    siteActivityPoints: user.siteActivityPoints,
+    activeStreak: user.activeStreak,
   });
 
   await prisma.user.update({

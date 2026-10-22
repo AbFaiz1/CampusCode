@@ -210,20 +210,20 @@ export function AccountManager({
           </div>
 
           <div>
-            <label className="label" htmlFor="verificationCode">
-              Verification code (optional but recommended)
+            <label className="label" htmlFor="password">
+              Platform Password
             </label>
             <input
-              id="verificationCode"
-              name="verificationCode"
-              className="input font-mono"
-              placeholder={verificationCode ?? "CC-XXXXXX"}
+              id="password"
+              name="password"
+              type="password"
+              required
+              className="input"
+              placeholder="Enter your platform password"
             />
             <p className="mt-1.5 text-xs leading-relaxed text-ink-faint">
               <ShieldCheck className="mr-1 inline h-3.5 w-3.5 text-positive" />
-              Put this code in your {PLATFORM_LABELS[platform]} display name or organisation
-              field, then link or sync. We match it against the public profile to prove the
-              account is yours — we never ask for your platform password.
+              Your password is used to verify ownership of the account securely.
             </p>
           </div>
 

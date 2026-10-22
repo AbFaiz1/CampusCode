@@ -73,12 +73,15 @@ function evaluateVerification(args: {
   return { status: "UNVERIFIED", method: null };
 }
 
-export async function linkAccount(args: {
+/**
+ * Step 1: Request a verification token for an account.
+ * Generates a token, stores it in the LinkedAccount, and sets status to PENDING.
+ */
+export async function requestVerificationToken(args: {
   userId: string;
   platform: string;
   handle: string;
-  verificationCode?: string | null;
-}): Promise<{ accountId: string; status: string; message: string }> {
+}): Promise<{ accountId: string; token: string; message: string }> {
   const { userId, platform: platformRaw, handle: handleRaw } = args;
   if (!isPlatform(platformRaw)) {
     throw new AccountError("Unsupported platform", "INVALID_PLATFORM");
@@ -120,14 +123,7 @@ export async function linkAccount(args: {
     );
   }
 
-  const code = args.verificationCode?.trim() || generateVerificationCode();
-  const verification = evaluateVerification({
-    identityText: profile.identityText,
-    code,
-    collegeName: user.college?.name ?? null,
-    emailDomain: user.college?.emailDomain ?? null,
-  });
-
+  const token = generateVerificationCode();
   const data = {
     handle: profile.handle ?? handle,
     profileUrl: PLATFORM_URLS[platform](profile.handle ?? handle),
@@ -143,9 +139,10 @@ export async function linkAccount(args: {
     titlePhoto: profile.titlePhoto ?? profile.avatarUrl,
     lastContestAt: profile.lastContestAt,
     streakDays: profile.streakDays,
-    verificationStatus: verification.status,
-    verificationMethod: verification.method,
-    verifiedAt: verification.status === "VERIFIED" ? new Date() : null,
+    verificationStatus: "PENDING",
+    verificationMethod: null,
+    verifiedAt: null,
+    pendingVerificationToken: token,
     lastSyncedAt: new Date(),
     syncStatus: "OK",
     syncError: null,
@@ -158,33 +155,85 @@ export async function linkAccount(args: {
     update: { ...data },
   });
 
+  // We still maintain the verificationClaim for auditing/legacy reasons
   await prisma.verificationClaim.upsert({
     where: { platform_handle: { platform, handle: data.handle } },
     create: {
       userId,
       platform,
       handle: data.handle,
-      code,
-      status: verification.status === "VERIFIED" ? "APPROVED" : "PENDING",
-      method: verification.method,
-      reviewedAt: verification.status === "VERIFIED" ? new Date() : null,
+      code: token,
+      status: "PENDING",
+      method: null,
+      reviewedAt: null,
     },
     update: {
-      code,
-      status: verification.status === "VERIFIED" ? "APPROVED" : "PENDING",
-      method: verification.method,
-      reviewedAt: verification.status === "VERIFIED" ? new Date() : null,
+      code: token,
+      status: "PENDING",
+      method: null,
+      reviewedAt: null,
     },
   });
 
-  const message =
-    verification.status === "VERIFIED"
-      ? `${PLATFORM_LABELS[platform]} account verified.`
-      : verification.status === "PENDING"
-        ? `Linked. Your ${PLATFORM_LABELS[platform]} profile mentions your college — waiting for the code check.`
-        : `Linked. Add "${code}" to your ${PLATFORM_LABELS[platform]} display name to verify ownership.`;
+  return {
+    accountId: account.id,
+    token,
+    message: `Add "${token}" to your ${PLATFORM_LABELS[platform]} display name or organization field to verify ownership.`,
+  };
+}
 
-  return { accountId: account.id, status: verification.status, message };
+/**
+ * Step 2: Verify the account by checking if the stored token is in the platform profile.
+ */
+export async function verifyAccount(args: {
+  userId: string;
+  accountId: string;
+}): Promise<{ status: string; message: string }> {
+  const { userId, accountId } = args;
+
+  const account = await prisma.linkedAccount.findUnique({
+    where: { id: accountId },
+  });
+  if (!account) throw new AccountError("Account not found", "NOT_FOUND");
+  if (account.userId !== userId) throw new AccountError("Unauthorized", "UNAUTHENTICATED");
+  if (!account.pendingVerificationToken) {
+    throw new AccountError("No pending verification token found for this account.", "INVALID_HANDLE");
+  }
+
+  const adapter = adapterFor(account.platform as Platform);
+  const profile = await adapter.fetchProfile(account.handle);
+
+  const verification = evaluateVerification({
+    identityText: profile.identityText,
+    code: account.pendingVerificationToken,
+    collegeName: null, // Token match is the primary proof
+    emailDomain: null,
+  });
+
+  if (verification.status === "VERIFIED") {
+    await prisma.linkedAccount.update({
+      where: { id: accountId },
+      data: {
+        verificationStatus: "VERIFIED",
+        verificationMethod: "CODE_MATCH",
+        verifiedAt: new Date(),
+        pendingVerificationToken: null,
+      },
+    });
+
+    await prisma.verificationClaim.update({
+      where: { platform_handle: { platform: account.platform, handle: account.handle } },
+      data: {
+        status: "APPROVED",
+        method: "CODE_MATCH",
+        reviewedAt: new Date(),
+      },
+    });
+
+    return { status: "VERIFIED", message: `${PLATFORM_LABELS[account.platform as Platform]} account verified successfully.` };
+  }
+
+  return { status: "UNVERIFIED", message: `Token not found in ${PLATFORM_LABELS[account.platform as Platform]} profile. Please ensure the code is exactly as provided.` };
 }
 
 export async function unlinkAccount(userId: string, accountId: string): Promise<void> {

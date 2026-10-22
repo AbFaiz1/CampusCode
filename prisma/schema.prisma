@@ -105,6 +105,7 @@ model User {
   activityLevel   String     @default("NEW") // NEW | ACTIVE | RECENT | DORMANT
   lastActiveAt    DateTime?
   activeStreak    Int        @default(0)
+  siteActivityPoints Int      @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -179,6 +180,8 @@ model LinkedAccount {
   verificationStatus String    @default("UNVERIFIED") // UNVERIFIED | PENDING | VERIFIED | FAILED | DISPUTED
   verificationMethod String? // HANDLE_MATCH | CODE_MATCH | ADMIN | COLLEGE_DOMAIN
   verifiedAt        DateTime?
+  pendingVerificationToken String?
+
 
   lastSyncedAt DateTime?
   syncStatus   String? // OK | ERROR | PENDING
