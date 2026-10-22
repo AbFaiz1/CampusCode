@@ -1,0 +1,484 @@
+// CampusCode — Prisma schema
+// SQLite datasource. Enums are modelled as strings (SQLite has no enum type);
+// the allowed values live in src/lib/constants.ts and are enforced in Zod schemas.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Organisation hierarchy: College -> Department -> Course
+// ---------------------------------------------------------------------------
+
+model College {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  city        String?
+  state       String?
+  country     String   @default("India")
+  logoUrl     String?
+  emailDomain String? // e.g. "mnnit.ac.in" — used for affiliation verification
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  departments Department[]
+  courses     Course[]
+  users       User[]
+  groups      Group[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  shortName String?
+  collegeId String
+  createdAt DateTime @default(now())
+
+  college College  @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  courses Course[]
+  users   User[]
+
+  @@unique([collegeId, name])
+  @@index([collegeId])
+}
+
+model Course {
+  id           String   @id @default(cuid())
+  name         String // e.g. "B.Tech Computer Science"
+  shortName    String? // e.g. "BTech CSE"
+  degree       String? // "B.Tech"
+  durationYears Int? // 4
+  departmentId String?
+  collegeId    String
+  createdAt    DateTime @default(now())
+
+  college    College     @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  users      User[]
+
+  @@unique([collegeId, name])
+  @@index([collegeId])
+  @@index([departmentId])
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  displayName  String
+  avatarUrl    String?
+  bio          String?
+  role         String  @default("STUDENT") // STUDENT | ADMIN
+  timezone     String  @default("Asia/Kolkata")
+
+  // Academic placement
+  collegeId       String?
+  departmentId    String?
+  courseId        String?
+  academicYear    Int? // 1..5
+  batch           String? // graduation batch / starting year, e.g. "2023"
+  graduationYear  Int?
+  codingInterests String? // comma separated tags
+
+  // Privacy controls
+  isPublic        Boolean @default(true)
+  showInDirectory Boolean @default(true)
+  showRatings     Boolean @default(true)
+  showPlatforms   Boolean @default(true)
+  showEmail       Boolean @default(false)
+
+  // CampusCode score + class
+  campusScore     Float      @default(0)
+  campusClass     String     @default("C") // C | B | A | S
+  scoreBreakdown  String? // JSON snapshot of the score computation
+  scoreComputedAt DateTime?
+  activityLevel   String     @default("NEW") // NEW | ACTIVE | RECENT | DORMANT
+  lastActiveAt    DateTime?
+  activeStreak    Int        @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  college       College?    @relation(fields: [collegeId], references: [id], onDelete: SetNull)
+  department    Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  course        Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  accounts            LinkedAccount[]
+  sessions            Session[]
+  friendshipsSent     Friendship[]   @relation("friendshipRequester")
+  friendshipsReceived Friendship[]   @relation("friendshipAddressee")
+  reminders           Reminder[]
+  notifications       Notification[]
+  participations      ContestParticipation[]
+  ratingHistory       RatingHistory[]
+  goals               Goal[]
+  achievements        Achievement[]
+  pushSubscriptions   PushSubscription[]
+  ownedGroups         Group[]         @relation("groupOwner")
+  groupMemberships    GroupMember[]
+  challengesCreated   GroupChallenge[] @relation("challengeCreator")
+  activityEvents      ActivityEvent[]
+  verificationClaims  VerificationClaim[]
+
+  @@index([collegeId])
+  @@index([departmentId])
+  @@index([courseId])
+  @@index([batch])
+  @@index([academicYear])
+  @@index([campusScore])
+  @@index([showInDirectory])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Linked external coding accounts
+// ---------------------------------------------------------------------------
+
+model LinkedAccount {
+  id        String @id @default(cuid())
+  userId    String
+  platform  String // CODEFORCES | LEETCODE | CODECHEF | ATCODER
+  handle    String
+  profileUrl String
+
+  // Verified metrics. `null` means "the platform does not expose this" — never 0.
+  rating           Int?
+  maxRating        Int?
+  rank             String? // e.g. "specialist", "Candidate Master"
+  globalRank       Int? // position among all users of that platform
+  problemsSolved   Int?
+  contestsAttended Int?
+  contestsTotal    Int?
+  reputation       Int?
+  streakDays       Int?
+  titlePhoto       String?
+  organization     String?
+  lastContestAt    DateTime?
+
+  verificationStatus String    @default("UNVERIFIED") // UNVERIFIED | PENDING | VERIFIED | FAILED | DISPUTED
+  verificationMethod String? // HANDLE_MATCH | CODE_MATCH | ADMIN | COLLEGE_DOMAIN
+  verifiedAt        DateTime?
+
+  lastSyncedAt DateTime?
+  syncStatus   String? // OK | ERROR | PENDING
+  syncError    String?
+  rawJson      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ratingHistory RatingHistory[]
+
+  @@unique([platform, handle])
+  @@index([userId])
+  @@index([platform])
+  @@index([verificationStatus])
+}
+
+model RatingHistory {
+  id          String   @id @default(cuid())
+  accountId   String
+  userId      String
+  platform    String
+  contestName String
+  externalId  String?
+  rank        Int?
+  ratingBefore Int?
+  ratingAfter Int?
+  delta       Int?
+  participatedAt DateTime
+  createdAt   DateTime @default(now())
+
+  account LinkedAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform, externalId])
+  @@index([accountId])
+  @@index([userId, participatedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Contests
+// ---------------------------------------------------------------------------
+
+model Contest {
+  id          String   @id @default(cuid())
+  platform    String
+  externalId  String
+  name        String
+  url         String
+  description String?
+  type        String? // ROUND | WEEKLY | LONG | HEURISTIC | TOURNAMENT
+  startTime   DateTime
+  endTime     DateTime
+  durationMinutes Int?
+  registrationDeadline DateTime?
+  status      String   @default("UPCOMING") // UPCOMING | ONGOING | COMPLETED | CANCELLED
+  participantCount Int?
+  isFeatured  Boolean  @default(false)
+  sourceUpdatedAt DateTime?
+  lastSyncedAt DateTime @default(now())
+
+  reminders      Reminder[]
+  participations ContestParticipation[]
+  notifications  Notification[]
+
+  @@unique([platform, externalId])
+  @@index([startTime])
+  @@index([platform, startTime])
+  @@index([status])
+}
+
+model ContestParticipation {
+  id         String   @id @default(cuid())
+  userId     String
+  contestId  String?
+  platform   String
+  externalId String
+  contestName String
+  startTime  DateTime
+  rank       Int?
+  ratingBefore Int?
+  ratingAfter Int?
+  points     Int?
+  createdAt  DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contest Contest? @relation(fields: [contestId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, platform, externalId])
+  @@index([userId, startTime])
+  @@index([startTime])
+  @@index([contestId])
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  userId    String
+  contestId String
+  remindAt  DateTime
+  offsetMinutes Int? // minutes before the contest start
+  channel   String   @default("WEB_PUSH") // WEB_PUSH | EMAIL | CALENDAR
+  status    String   @default("SCHEDULED") // SCHEDULED | SENT | CANCELLED | FAILED
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contestId, offsetMinutes, channel])
+  @@index([status, remindAt])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  link      String?
+  kind      String   @default("REMINDER") // REMINDER | FRIEND | SYSTEM | SCHEDULE_CHANGE
+  contestId String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contest Contest? @relation(fields: [contestId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String?
+  auth      String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Social graph
+// ---------------------------------------------------------------------------
+
+model Friendship {
+  id          String   @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      String   @default("PENDING") // PENDING | ACCEPTED | REJECTED
+  createdAt   DateTime @default(now())
+  respondedAt DateTime?
+
+  requester User @relation("friendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("friendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  collegeId   String?
+  ownerId     String
+  isPrivate   Boolean  @default(true)
+  joinCode    String   @unique
+  createdAt   DateTime @default(now())
+
+  college    College?        @relation(fields: [collegeId], references: [id], onDelete: SetNull)
+  owner      User            @relation("groupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    GroupMember[]
+  challenges GroupChallenge[]
+
+  @@unique([collegeId, name])
+  @@index([ownerId])
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  role      String   @default("MEMBER") // OWNER | ADMIN | MEMBER
+  joinedAt  DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+model GroupChallenge {
+  id          String   @id @default(cuid())
+  groupId     String
+  createdById String
+  title       String
+  description String?
+  metric      String   @default("CONTESTS") // CONTESTS | PROBLEMS | RATING_GAIN | CLASS
+  target      Int      @default(1)
+  startsAt    DateTime @default(now())
+  endsAt      DateTime
+  createdAt   DateTime @default(now())
+
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User  @relation("challengeCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+}
+
+// ---------------------------------------------------------------------------
+// Goals, activity, achievements
+// ---------------------------------------------------------------------------
+
+model Goal {
+  id              String   @id @default(cuid())
+  userId          String
+  weekStart       DateTime
+  targetContests  Int      @default(2)
+  targetProblems  Int      @default(10)
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+}
+
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String // CONTEST | SOLVED | CLASS_UP | FRIEND_JOIN | GOAL_MET | STREAK
+  title     String
+  points    Int      @default(0)
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  userId      String
+  code        String
+  title       String
+  description String
+  icon        String?
+  earnedAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, code])
+  @@index([userId])
+}
+
+model VerificationClaim {
+  id         String   @id @default(cuid())
+  userId     String
+  platform   String
+  handle     String
+  code       String
+  status     String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  method     String?
+  reviewedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, handle])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+model SyncLog {
+  id         String   @id @default(cuid())
+  kind       String // CONTESTS | ACCOUNTS | SCORES
+  status     String // SUCCESS | PARTIAL | FAILED
+  message    String?
+  details    String?
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+
+  @@index([kind, startedAt])
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

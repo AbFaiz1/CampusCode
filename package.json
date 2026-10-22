@@ -1,17 +1,41 @@
 {
-  "name": "rankora",
-  "version": "0.1.0",
+  "name": "campuscode",
+  "version": "1.0.0",
   "private": true,
+  "description": "College competitive programming social and ranking network",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset --force",
+    "seed": "NODE_OPTIONS=--conditions=react-server tsx prisma/seed.ts",
+    "sync:contests": "NODE_OPTIONS=--conditions=react-server tsx scripts/sync-contests.ts",
+    "setup": "prisma generate && prisma migrate deploy && npm run seed && npm run sync:contests",
+    "postinstall": "prisma generate",
+    "smoke:platforms": "NODE_OPTIONS=--conditions=react-server tsx scripts/smoke-platforms.ts",
+    "smoke:app": "NODE_OPTIONS=--conditions=react-server tsx scripts/smoke-app.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "@prisma/adapter-better-sqlite3": "^7.10.1",
+    "@prisma/adapter-libsql": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "better-sqlite3": "^13.0.3",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^1.61.0",
     "next": "16.4.2",
+    "prisma": "^7.10.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "recharts": "^3.10.1",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
@@ -21,6 +45,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
