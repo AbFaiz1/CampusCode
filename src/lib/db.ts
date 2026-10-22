@@ -1,5 +1,4 @@
 import path from "node:path";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
 import { PrismaClient } from "@/generated/prisma/client";
 
@@ -36,6 +35,9 @@ function createClient(): PrismaClient {
     });
   }
 
+  // Local development only - dynamically loaded so serverless production never loads native addons
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
   const adapter = new PrismaBetterSqlite3({ url: resolveDatabaseUrl() });
   return new PrismaClient({
     adapter,
@@ -48,4 +50,5 @@ export const prisma = globalForPrisma.prisma ?? createClient();
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
+
 
