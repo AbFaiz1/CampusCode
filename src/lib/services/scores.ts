@@ -29,22 +29,36 @@ export async function recomputeUserScore(userId: string): Promise<ScoreBreakdown
     verified: true,
   }));
 
-  // Cohort: verified accounts of students in the same college.
+  // Cohort: verified accounts of students in the same college (queried concurrently).
+  const activePlatforms = Array.from(
+    new Set(
+      accounts
+        .filter((a) => a.rating !== null && isPlatform(a.platform))
+        .map((a) => a.platform as Platform),
+    ),
+  );
+
   const cohortRatings: Partial<Record<Platform, number[]>> = {};
-  for (const account of accounts) {
-    if (account.rating === null || !isPlatform(account.platform)) continue;
-    const platform = account.platform as Platform;
-    const peers = await prisma.linkedAccount.findMany({
-      where: {
-        platform,
-        rating: { not: null },
-        verificationStatus: "VERIFIED",
-        user: user.collegeId ? { collegeId: user.collegeId } : {},
-      },
-      select: { rating: true },
+  if (activePlatforms.length > 0) {
+    const peerQueries = activePlatforms.map(async (platform) => {
+      const peers = await prisma.linkedAccount.findMany({
+        where: {
+          platform,
+          rating: { not: null },
+          verificationStatus: "VERIFIED",
+          user: user.collegeId ? { collegeId: user.collegeId } : {},
+        },
+        select: { rating: true },
+      });
+      return { platform, ratings: peers.map((p) => p.rating as number) };
     });
-    cohortRatings[platform] = peers.map((p) => p.rating as number);
+
+    const results = await Promise.all(peerQueries);
+    for (const res of results) {
+      cohortRatings[res.platform] = res.ratings;
+    }
   }
+
 
   const contestDates = user.ratingHistory.map((h) => h.participatedAt);
   const ratingSeries = user.ratingHistory

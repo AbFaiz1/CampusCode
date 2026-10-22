@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
+import { cache } from "react";
 import { prisma } from "@/lib/db";
 export { hashPassword, verifyPassword } from "@/lib/password";
 
@@ -61,7 +62,7 @@ export type SessionUser = {
   campusClass: string;
 };
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+export const getSessionUser = cache(async function getSessionUser(): Promise<SessionUser | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -86,10 +87,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     campusScore: user.campusScore,
     campusClass: user.campusClass,
   };
-}
+});
 
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) throw new Error("UNAUTHENTICATED");
   return user;
 }
+

@@ -241,36 +241,46 @@ export async function syncAccount(accountId: string): Promise<{
         if (!derivedLastContestAt || point.participatedAt > derivedLastContestAt) {
           derivedLastContestAt = point.participatedAt;
         }
-        await prisma.ratingHistory.upsert({
-          where: {
-            userId_platform_externalId: {
-              userId: account.userId,
-              platform: account.platform,
-              externalId: point.externalId,
-            },
-          },
-          create: {
-            accountId: account.id,
-            userId: account.userId,
-            platform: account.platform,
-            contestName: point.contestName,
-            externalId: point.externalId,
-            rank: point.rank,
-            ratingBefore: point.ratingBefore,
-            ratingAfter: point.ratingAfter,
-            delta: point.delta,
-            participatedAt: point.participatedAt,
-          },
-          update: {
-            ratingBefore: point.ratingBefore,
-            ratingAfter: point.ratingAfter,
-            delta: point.delta,
-            rank: point.rank,
-            participatedAt: point.participatedAt,
-          },
-        });
-        historyCount += 1;
       }
+
+      // Parallelize history upserts in concurrent batches of 15
+      const chunkSize = 15;
+      for (let i = 0; i < history.length; i += chunkSize) {
+        const chunk = history.slice(i, i + chunkSize);
+        await Promise.all(
+          chunk.map((point) =>
+            prisma.ratingHistory.upsert({
+              where: {
+                userId_platform_externalId: {
+                  userId: account.userId,
+                  platform: account.platform,
+                  externalId: point.externalId,
+                },
+              },
+              create: {
+                accountId: account.id,
+                userId: account.userId,
+                platform: account.platform,
+                contestName: point.contestName,
+                externalId: point.externalId,
+                rank: point.rank,
+                ratingBefore: point.ratingBefore,
+                ratingAfter: point.ratingAfter,
+                delta: point.delta,
+                participatedAt: point.participatedAt,
+              },
+              update: {
+                ratingBefore: point.ratingBefore,
+                ratingAfter: point.ratingAfter,
+                delta: point.delta,
+                rank: point.rank,
+                participatedAt: point.participatedAt,
+              },
+            }),
+          ),
+        );
+      }
+      historyCount = history.length;
     } catch {
       // Rating history is best-effort; the profile sync still succeeded.
     }

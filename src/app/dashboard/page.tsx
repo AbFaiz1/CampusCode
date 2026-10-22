@@ -58,7 +58,15 @@ export default async function DashboardPage() {
   });
   if (!user) redirect("/login");
 
-  const [breakdown, friends, reminders, upcoming] = await Promise.all([
+  const [
+    breakdown,
+    friends,
+    reminders,
+    upcoming,
+    collegeBoard,
+    higherCollegeCount,
+    higherDeptCount,
+  ] = await Promise.all([
     getScoreBreakdown(user.id),
     listFriends(user.id),
     listReminders(user.id),
@@ -67,19 +75,34 @@ export default async function DashboardPage() {
       orderBy: { startTime: "asc" },
       take: 5,
     }),
+    user.collegeId
+      ? leaderboard({ kind: "college", collegeId: user.collegeId, limit: 10 })
+      : Promise.resolve(null),
+    user.collegeId
+      ? prisma.user.count({
+          where: {
+            collegeId: user.collegeId,
+            campusScore: { gt: user.campusScore },
+            showInDirectory: true,
+            isPublic: true,
+          },
+        })
+      : Promise.resolve(0),
+    user.departmentId
+      ? prisma.user.count({
+          where: {
+            departmentId: user.departmentId,
+            campusScore: { gt: user.campusScore },
+            showInDirectory: true,
+            isPublic: true,
+          },
+        })
+      : Promise.resolve(0),
   ]);
 
-  const collegeBoard = user.collegeId
-    ? await leaderboard({ kind: "college", collegeId: user.collegeId })
-    : null;
-  const departmentBoard = user.departmentId
-    ? await leaderboard({ kind: "department", departmentId: user.departmentId })
-    : null;
+  const collegeRank = user.collegeId ? higherCollegeCount + 1 : null;
+  const departmentRank = user.departmentId ? higherDeptCount + 1 : null;
 
-  const collegeRank =
-    collegeBoard?.entries.find((e) => e.id === user.id)?.rank ?? null;
-  const departmentRank =
-    departmentBoard?.entries.find((e) => e.id === user.id)?.rank ?? null;
 
   const chartData: RatingPointData[] = [];
   const platformsWithHistory = new Set<Platform>();

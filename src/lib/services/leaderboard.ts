@@ -167,6 +167,9 @@ export async function leaderboard(scope: LeaderboardScope) {
       break;
   }
 
+  const limit = scope.limit ?? 100;
+  const isPlatformScope = scope.kind === "platform" && !!scope.platform;
+
   const users = await prisma.user.findMany({
     where,
     include: {
@@ -176,6 +179,7 @@ export async function leaderboard(scope: LeaderboardScope) {
       course: { select: { id: true, name: true, shortName: true } },
     },
     orderBy: { campusScore: "desc" },
+    ...(isPlatformScope ? { take: 250 } : { take: limit }),
   });
 
   let rows = users.map((u) => {
@@ -209,7 +213,6 @@ export async function leaderboard(scope: LeaderboardScope) {
       .sort((a, b) => (b.platformRatings[scope.platform!] ?? 0) - (a.platformRatings[scope.platform!] ?? 0));
   }
 
-  const limit = scope.limit ?? 100;
   return {
     metric,
     entries: rows.slice(0, limit).map((row, index) => ({ ...row, rank: index + 1 })),
