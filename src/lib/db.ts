@@ -25,9 +25,31 @@ function createClient(): PrismaClient {
   const url = process.env.DATABASE_URL ?? "file:./dev.db";
 
   if (url.startsWith("libsql:") || url.startsWith("https:")) {
+    let authToken = process.env.TURSO_AUTH_TOKEN || process.env.DATABASE_AUTH_TOKEN;
+    let cleanUrl = url;
+
+    try {
+      const parsed = new URL(url.replace("libsql:", "https:"));
+      const queryToken = parsed.searchParams.get("authToken") || parsed.searchParams.get("token");
+      if (queryToken) {
+        authToken = queryToken;
+        parsed.searchParams.delete("authToken");
+        parsed.searchParams.delete("token");
+        cleanUrl = parsed.toString().replace("https:", "libsql:");
+      }
+    } catch {
+      // url fallback
+    }
+
+    if (!authToken) {
+      console.error(
+        "❌ [CampusCode DB Error] TURSO_AUTH_TOKEN is missing! Please add TURSO_AUTH_TOKEN in Vercel Environment Variables."
+      );
+    }
+
     const adapter = new PrismaLibSql({
-      url,
-      authToken: process.env.TURSO_AUTH_TOKEN,
+      url: cleanUrl,
+      authToken,
     });
     return new PrismaClient({
       adapter,
